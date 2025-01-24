@@ -1,0 +1,158 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: faq-service
+  namespace: faq-service
+spec:
+  selector:
+    matchLabels:
+      app: faq-service
+  replicas: 1
+  strategy:
+    rollingUpdate:
+      maxSurge: 50%
+      maxUnavailable: 10%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: faq-service
+    spec:
+      containers:
+        - env:
+            - name: PORT
+              valueFrom:
+                secretKeyRef:
+                  key: PORT
+                  name: faq-service-secret
+            - name: NODE_ENV
+              valueFrom:
+                secretKeyRef:
+                  key: NODE_ENV
+                  name: faq-service-secret
+            - name: DB_CONNECTION
+              valueFrom:
+                secretKeyRef:
+                  key: DB_CONNECTION
+                  name: faq-service-secret
+            - name: DB_HOST
+              valueFrom:
+                secretKeyRef:
+                  key: DB_HOST
+                  name: faq-service-secret
+            - name: DB_PORT
+              valueFrom:
+                secretKeyRef:
+                  key: DB_PORT
+                  name: faq-service-secret
+            - name: DB_DATABASE
+              valueFrom:
+                secretKeyRef:
+                  key: DB_DATABASE
+                  name: faq-service-secret
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  key: DB_USERNAME
+                  name: faq-service-secret
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: DB_PASSWORD
+                  name: faq-service-secret
+            - name: JWTUSERSECRETTOKEN
+              valueFrom:
+                secretKeyRef:
+                  key: JWTUSERSECRETTOKEN
+                  name: faq-service-secret
+            - name: JWTUSERIDENTIFIER
+              valueFrom:
+                secretKeyRef:
+                  key: JWTUSERIDENTIFIER
+                  name: faq-service-secret
+            - name: JWTINFLUENCERSECRETTOKEN
+              valueFrom:
+                secretKeyRef:
+                  key: JWTINFLUENCERSECRETTOKEN
+                  name: faq-service-secret
+            - name: JWTINFLUENCERIDENTIFIER
+              valueFrom:
+                secretKeyRef:
+                  key: JWTINFLUENCERIDENTIFIER
+                  name: faq-service-secret
+            - name: STORAGE_URL_IMAGES
+              valueFrom:
+                secretKeyRef:
+                  key: STORAGE_URL_IMAGES
+                  name: faq-service-secret
+            - name: SLACK_URL
+              valueFrom:
+                secretKeyRef:
+                  key: SLACK_URL
+                  name: faq-service-secret
+            - name: URL_INTERNAL_SEO
+              valueFrom:
+                secretKeyRef:
+                  key: URL_INTERNAL_SEO
+                  name: faq-service-secret
+          image: 461617192451.dkr.ecr.ap-southeast-1.amazonaws.com/faq-service:latest
+          name: faq-service
+          ports:
+          - containerPort: 5698
+      imagePullSecrets:
+      - name: regcred
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: faq-service
+  name: faq-service-svc
+  namespace: faq-service
+spec:
+  ports:
+    - name: http-faq-service
+      port: 111
+      protocol: TCP
+      targetPort: 5698
+  selector:
+    app: faq-service
+  sessionAffinity: None
+  type: ClusterIP
+---
+apiVersion: autoscaling/v1
+kind: HorizontalPodAutoscaler
+metadata:
+  name: faq-service-hpa
+  namespace: faq-service
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: faq-service
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: faq-service
+  namespace: faq-service
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: api-dev.socialbread.id
+    http:
+      paths:
+      - path: /faq(/|$)(.*)
+        pathType: Prefix
+        backend:
+          service:
+            name: faq-service-svc
+            port:
+              number: 111

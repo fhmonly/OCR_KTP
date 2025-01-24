@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Form Upload</title>
+</head>
+
+<body>
+    <form id="uploadForm" enctype="multipart/form-data">
+        <input type="file" name="image" id="image" required>
+        <button type="submit">Submit</button>
+    </form>
+    <script>
+        // Fungsi untuk mengirim file dengan fetch
+        async function upload(form) {
+            console.log('Uploading...');
+            const formData = new FormData(form);
+            const response = await fetch('http://localhost:3000/api/ocr', {
+                method: 'POST',
+                body: formData
+            });
+            const result = await response.json();
+            console.log('Response:', result);
+        }
+
+        // Pastikan aksi default form dicegah
+        document.addEventListener('DOMContentLoaded', () => {
+            const form = document.querySelector('#uploadForm');
+            form.addEventListener('submit', (e) => {
+                e.preventDefault(); // Cegah reload default
+                upload(form);
+            });
+        });
+    </script>
+</body>
+
+</html>

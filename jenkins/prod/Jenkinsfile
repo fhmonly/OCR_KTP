@@ -1,0 +1,70 @@
+pipeline {
+    agent any
+    environment {
+        HOME = '.'
+        CI = 'true'
+        CREDENTIALS_ID = 'SCBRD-AWS'
+        IMAGE_VERSION = "${env.BUILD_NUMBER}"
+	AWS_REGION ='ap-southeast-1' 
+        DOCKER_VERSION='overlay2'
+        IMAGE_NAME='faq-service'
+        CLUSTER='prod-scbrd-cluster'
+        DEPLOYMENT_FILE="jenkins/prod/deployment.yaml"
+        REGISTRY="461617192451.dkr.ecr.ap-southeast-1.amazonaws.com/faq-service-prod"
+
+    }
+
+    stages {
+
+        stage('Get commit details') {
+             steps {
+                script {
+                   env.GIT_COMMIT_MSG = sh (script: 'git log -1 --pretty=%B ${GIT_COMMIT}', returnStdout: true).trim()
+                   env.GIT_AUTHOR = sh (script: 'git log -1 --pretty=%cn ${GIT_COMMIT}', returnStdout: true).trim()
+                                      }
+                        }
+                 }
+        stage('Build docker') {
+            steps {
+
+                sh 'docker build -t $REGISTRY:$IMAGE_VERSION .'
+
+            }
+       }
+      stage('tag docker') {
+
+            steps {
+
+                 sh 'docker tag $REGISTRY:$IMAGE_VERSION $REGISTRY:latest'
+
+            }
+
+        }
+
+        stage('Push Docker Image to ECR') {
+            steps {
+                withAWS(credentials: 'SCBRD-AWS', region: 'ap-southeast-1') {
+                    sh 'aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $REGISTRY'
+                    sh 'docker push $REGISTRY:$IMAGE_VERSION && docker push $REGISTRY:latest'
+                }
+            }
+        }
+
+       stage('Deploy') {
+            steps {
+                withAWS(credentials: 'SCBRD-AWS', region: 'ap-southeast-1') {
+                  script {
+                    sh ('aws eks update-kubeconfig --name $CLUSTER --region $AWS_REGION')
+                    sh "sed -i 's,$REGISTRY:latest,$REGISTRY:$IMAGE_VERSION,g' $DEPLOYMENT_FILE"
+                    sh 'kubectl apply -f $DEPLOYMENT_FILE'
+                }
+                }
+        }
+    }
+    }
+    post {
+       success {
+            slackSend( channel: "#deployment-prod-status", teamDomain: 'social-bread', tokenCredentialId: 'slack-secret-prod', color: "good", message: "Build deployed successfully - ${env.JOB_NAME} - Build No=${env.BUILD_NUMBER} - Push By=${env.GIT_AUTHOR} - Commit Message=${env.GIT_COMMIT_MSG} (<${env.BUILD_URL}|Open-url>)")
+        }
+    }
+}
