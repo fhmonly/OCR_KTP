@@ -62,7 +62,7 @@ router.post('/ocr', upload.single('image'), async (req, res) => {
             // Tempat/Tgl Lahir
             if (correctedText.includes('Tempat/Tgl Lahir')) {
                 extractWithRegex(
-                    /Tempat\/Tgl Lahir.*:\s*([\w\s]+),\s*(\d{2}-\d{2}-\d{4})/i,
+                    /Tempat.Tgl Lahir.*:\s*([\w\s]+),\s*(\d{2}-\d{2}-\d{4})/i,
                     ['tempat_lahir', 'tanggal_lahir']
                 );
             }
@@ -82,7 +82,7 @@ router.post('/ocr', upload.single('image'), async (req, res) => {
 
             // RT/RW
             if (correctedText.includes('RT/RW')) {
-                extractWithRegex(/RT\/RW\s*[-:\s]?\s*(\d+)\/(\d+)/i, ['rt', 'rw']);
+                extractWithRegex(/RT.RW\s*[-:\s]?\s*(\d+)\/(\d+)/i, ['rt', 'rw']);
             }
 
             // Kel/Desa
@@ -123,7 +123,7 @@ router.post('/ocr', upload.single('image'), async (req, res) => {
 
             // Gol Darah
             if (correctedText.includes('Gol. Darah')) {
-                extractWithRegex(/Gol\. Darah.*:\s*(A|B|AB|O)?[+-]?/i, ['gol_darah'], ['-']);
+                extractWithRegex(/Gol.*Darah.*:\s*(A|B|AB|O)?[+-]?/i, ['gol_darah'], ['-']);
             }
         })
 
