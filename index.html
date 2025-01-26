@@ -12,16 +12,22 @@
         <input type="file" name="image" id="image" required>
         <button type="submit">Submit</button>
     </form>
+    <p>Preview:</p>
+    <div id="result-preview">
+
+    </div>
     <script>
         // Fungsi untuk mengirim file dengan fetch
         async function upload(form) {
-            console.log('Uploading...');
+            const resultPreview = document.querySelector('#result-preview')
+            resultPreview.textContent = 'Uploading...'
             const formData = new FormData(form);
             const response = await fetch('http://localhost:3000/api/ocr', {
                 method: 'POST',
                 body: formData
             });
             const result = await response.json();
+            resultPreview.textContent = JSON.stringify(result).replaceAll('", "', '",\n"')
             console.log('Response:', result);
         }
 

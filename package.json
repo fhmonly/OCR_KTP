@@ -9,6 +9,7 @@
   "dependencies": {
     "amqplib": "^0.10.3",
     "axios": "^1.4.0",
+    "canvas": "^3.1.0",
     "compression": "^1.7.4",
     "cookie-parser": "~1.4.4",
     "cors": "^2.8.5",
@@ -27,6 +28,7 @@
     "mysql": "^2.18.1",
     "node-schedule": "^2.1.1",
     "nodemon": "^3.1.9",
+    "opencv.js": "^1.2.1",
     "pg": "^8.11.1",
     "sharp": "^0.33.5",
     "tesseract.js": "^6.0.0"
