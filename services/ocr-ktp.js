@@ -2,19 +2,20 @@ const sharp = require('sharp');
 const Tesseract = require('tesseract.js');
 const FuzzySet = require('fuzzyset.js');
 
-const validWords = FuzzySet(['NIK', 'Nama', 'Tempat', 'Tgl', 'Lahir', 'Jenis', 'Kelamin', 'Alamat', 'RT', 'RW', 'Kel', 'Desa', 'Kecamatan', 'Agama', 'Status', 'Perkawinan', 'Pekerjaan', 'Kewarganegaraan', 'Berlaku', 'Hingga', 'Gol', 'Darah', 'LAKI-LAKI', 'PEREMPUAN', 'ISLAM', 'KRISTEN', 'KATOLIK', 'HINDU', 'BUDDHA', 'KONGHUCU', 'SEUMUR', 'HIDUP', 'TempatTglLahir', 'KelDesa', 'RTRW', 'GolDarah'
+const validWords = FuzzySet(['NIK', 'Nama', 'Tempat', 'Tgl', 'Lahir', 'Jenis', 'Kelamin', 'Alamat', 'RT', 'RW', 'Kel', 'Desa', 'Kecamatan', 'Agama', 'Status', 'Perkawinan', 'Pekerjaan', 'Kewarganegaraan', 'Berlaku', 'Hingga', 'Gol', 'Darah', 'LAKI-LAKI', 'PEREMPUAN', 'ISLAM', 'KRISTEN', 'KATOLIK', 'HINDU', 'BUDDHA', 'KONGHUCU', 'SEUMUR', 'HIDUP', 'TempatTglLahir', 'TempatTgl', 'Tempat/Tgl', 'Kel/Desa', 'KelDesa', 'RTRW', 'RT/RW', 'GolDarah'
 ]);
 
 function correctWord(word) {
     const suggestions = validWords.get(word);
-    if (suggestions && suggestions[0][0] > 0.7) {
+    if (suggestions && suggestions[0][0] > 0.8) {
         return suggestions[0][1];
     }
     return word;
 }
 
-function makeObjFromSentencesArr(sentences) {
+function extractData(sentences) {
     const result = {
+        nik: "-",
         agama: "-",
         alamat: "-",
         desa: '-',
@@ -23,7 +24,6 @@ function makeObjFromSentencesArr(sentences) {
         kecamatan: "-",
         kewarganegaraan: "-",
         nama: "-",
-        nik: "-",
         pekerjaan: "-",
         rt: "-",
         rw: "-",
@@ -31,99 +31,89 @@ function makeObjFromSentencesArr(sentences) {
         tanggal_lahir: "-",
         tempat_lahir: "-",
     }
-    sentences.forEach(v => {
-        const words = v.split(/\s+/);
-        const correctedWords = words.map((word) => correctWord(word));
-        const correctedText = correctedWords.join(' ');
-
-        const extractWithRegex = (pattern, keys) => {
-            const match = correctedText.match(pattern);
-            keys.forEach((key, index) => {
-                if (result[key] === '-')
-                    result[key] = (match || [])[index + 1] || '-';
-            });
-        };
-
-        // NIK
-        if (correctedText.match(/NIK/i)) {
-            extractWithRegex(/NIK[^\w_]*(\d+)/i, ['nik']);
+    function setResult(key, value) {
+        if (!value) return
+        if (result[key] === '-') {
+            result[key] = value
         }
+    }
 
-        // Nama
-        if (correctedText.match(/Nama/i)) {
-            extractWithRegex(/Nama[^\w_]*([\w\s]+)/i, ['nama']);
-        }
+    const [, fullRowNIK] = sentences.match(/(NIK[^]*)Nama/i) || []
+    const [, nik] = fullRowNIK?.match(/NIK[^\w_]*([\d?]+)/i) || []
+    setResult('nik', nik?.replaceAll('?', 7))
+    if (fullRowNIK) sentences = sentences.replace(fullRowNIK, '')
 
-        // Tempat/Tgl Lahir
-        if (correctedText.match(/Tempat.*Tgl.*Lahir/i)) {
-            extractWithRegex(
-                /Tempat.*Tgl.*Lahir[^\w_]*([\w\s]+),\s*(\d{2}-\d{2}-\d{4})/i,
-                ['tempat_lahir', 'tanggal_lahir']
-            );
-        }
+    const [, fullRowNama] = sentences.match(/(Nama[^]*)Tempat/i) || []
+    const [, nama] = fullRowNama?.replaceAll('\n', '').trim()
+        ?.match(/Nama[^\w_]*([\w\s.]+)/i) || []
+    setResult('nama', nama)
+    if (fullRowNama) sentences = sentences.replace(fullRowNama, '')
 
-        // Jenis Kelamin
-        if (correctedText.match(/Jenis.*Kelamin/i)) {
-            extractWithRegex(
-                /Jenis.*Kelamin[^\w_]*(laki-laki|perempuan)/i,
-                ['jenis_kelamin'],
+    const [, fullRowTTL] = sentences.match(/(Tempat.*Tgl.*Lahir[^]*)Jenis/i) || []
+    const [, tempatLahir, tanggalLahir] = fullRowTTL?.replaceAll('\n', '').trim()
+        ?.match(/Tempat.*Tgl.*Lahir[^\w_]*([\w\s]+)[,]*\s*(\d{2}-\d{2}-\d{4})/i) || []
+    setResult('tempat_lahir', tempatLahir)
+    setResult('tanggal_lahir', tanggalLahir)
+    if (fullRowTTL) sentences = sentences.replace(fullRowTTL, '')
 
-            );
-        }
+    const [, fullRowJKGD] = sentences.match(/(Jenis.*Kelamin[^]*)Alamat/i) || []
+    const [, jenisKelamin, golDarah] = fullRowJKGD?.replaceAll('\n', '').trim()
+        ?.match(/Jenis.*Kelamin[^\w_]*(laki-laki|perempuan).*Gol.*Darah[^\w_]*(A|B|AB|O)?[+-]?/i) || []
+    setResult('jenis_kelamin', jenisKelamin)
+    setResult('gol_darah', golDarah)
+    if (fullRowJKGD) sentences = sentences.replace(fullRowJKGD, '')
 
-        // Alamat
-        if (correctedText.match(/Alamat/i)) {
-            extractWithRegex(/Alamat[^\w_]*([\w\s.\/]+)/i, ['alamat']);
-        }
+    const [, fullRowAlamat] = sentences.match(/(Alamat[^]*)RT.*RW/i) || []
+    const [, alamat] = fullRowAlamat?.replaceAll('\n', '').trim()
+        ?.match(/Alamat[^\w_]*([\w\s.\/]+)/i) || []
+    setResult('alamat', alamat)
+    if (fullRowAlamat) sentences = sentences.replace(fullRowAlamat, '')
 
-        // RT/RW
-        if (correctedText.match(/RT.*RW/i)) {
-            extractWithRegex(/RT.*RW[^\w_]*(\d+)\/(\d+)/i, ['rt', 'rw']);
-        }
+    const [, fullRowRtRw] = sentences.match(/(RT.*RW[^]*)Kel.*Desa/i) || []
+    const [, rt, rw] = fullRowRtRw?.replaceAll('\n', '').trim()
+        ?.match(/RT.*RW[^\w_]*(\d+)\/(\d+)/i) || []
+    setResult('rt', rt)
+    setResult('rw', rw)
+    if (fullRowRtRw) sentences = sentences.replace(fullRowRtRw, '')
 
-        // Kel/Desa
-        if (correctedText.match(/Kel.*Desa/i)) {
-            extractWithRegex(/Kel.*Desa[^\w_]*([\w\s]*)/i, ['desa']);
-        }
+    const [, fullRowDesa] = sentences.match(/(Kel.*Desa[^]*)Kecamatan/i) || []
+    const [, desa] = fullRowDesa?.replaceAll('\n', '').trim()
+        ?.match(/Kel.*Desa[^\w_]*([\w\s]*)/i) || []
+    setResult('desa', desa)
+    if (fullRowDesa) sentences = sentences.replace(fullRowDesa, '')
 
-        // Kecamatan
-        if (correctedText.match(/Kecamatan/i)) {
-            extractWithRegex(/Kecamatan[^\w_]*([\w\s]+)/i, ['kecamatan']);
-        }
+    const [, fullRowKecamatan] = sentences.match(/(Kecamatan[^]*)Agama/i) || []
+    const [, kecamatan] = fullRowKecamatan?.replaceAll('\n', '').trim()
+        ?.match(/Kecamatan[^\w_]*([\w\s]+)/i) || []
+    setResult('kecamatan', kecamatan)
+    if (fullRowKecamatan) sentences = sentences.replace(fullRowKecamatan, '')
 
-        // Agama
-        if (correctedText.match(/Agama/i)) {
-            extractWithRegex(/Agama[^\w_]*([\w]+)/i, ['agama']);
-        }
+    const [, fullRowAgama] = sentences.match(/(Agama[^]*)Status.*Perkawinan/i) || []
+    const [, agama] = fullRowAgama?.replaceAll('\n', '').trim()
+        ?.match(/Agama[^\w_]*([\w]+)/i) || []
+    setResult('agama', agama)
+    if (fullRowAgama) sentences = sentences.replace(fullRowAgama, '')
 
-        // Status Perkawinan
-        if (correctedText.match(/Status.*Perkawinan/i)) {
-            extractWithRegex(
-                /Status.*Perkawinan[^\w_]*(BELUM KAWIN|KAWIN)/i,
-                ['status_perkawinan']
-            );
-        }
+    const [, fullRowStatusKawin] = sentences.match(/(Status.*Perkawinan[^]*)Pekerjaan/i) || []
+    const [, statusPerkawinan] = fullRowStatusKawin?.replaceAll('\n', '').trim()
+        ?.match(/Status.*Perkawinan[^\w_]*(BELUM KAWIN|KAWIN)/i) || []
+    setResult('status_perkawinan', statusPerkawinan)
+    if (fullRowStatusKawin) sentences = sentences.replace(fullRowStatusKawin, '')
 
-        // Pekerjaan
-        if (correctedText.match(/Pekerjaan/i)) {
-            extractWithRegex(/Pekerjaan[^\w_]*([\w\s]+)/i, ['pekerjaan']);
-        }
+    const [, fullRowPekerjaan] = sentences.match(/(Pekerjaan[^]*)Kewarganegaraan/i) || []
+    const [, pekerjaan] = fullRowPekerjaan?.replaceAll('\n', '').trim()
+        ?.match(/Pekerjaan[^\w_]*([\w\s]+)/i) || []
+    setResult('pekerjaan', pekerjaan?.replaceAll('?', 7))
+    if (fullRowPekerjaan) sentences = sentences.replace(fullRowPekerjaan, '')
 
-        // Kewarganegaraan
-        if (correctedText.match(/Kewarganegaraan/i)) {
-            extractWithRegex(
-                /Kewarganegaraan[^\w_]*([\w]+)/i,
-                ['kewarganegaraan']
-            );
-        }
+    const [, fullRowKewarganegaraan] = sentences.match(/(Kewarganegaraan[^]*)/i) || []
+    const [, kewarganegaraan] = fullRowKewarganegaraan?.match(/Kewarganegaraan[^\w_]*([\w]+)/i) || []
+    setResult('kewarganegaraan', kewarganegaraan?.replaceAll('?', 7))
+    if (fullRowKewarganegaraan) sentences = sentences.replace(fullRowKewarganegaraan, '')
 
-        // Gol Darah
-        if (correctedText.match(/Gol.*Darah/i)) {
-            extractWithRegex(/Gol.*Darah[^\w_]*(A|B|AB|O)?[+-]?/i, ['gol_darah']);
-        }
-    })
     return result
 }
+
 async function KTPDataExtractor(imagePath, grayscalePath) {
     await sharp(imagePath)
         .grayscale()
@@ -133,8 +123,27 @@ async function KTPDataExtractor(imagePath, grayscalePath) {
         logger: (info) => console.log(info),
     });
 
-    const sentences = text.split('\n').filter(c => ![null, undefined, ''].includes(c.toString().trim()))
-    return makeObjFromSentencesArr(sentences)
+    const sentences = text.split('\n')
+        .map(v => v.trim())
+        .filter(c => ![null, undefined, ''].includes(c))
+
+    const fixedSentences = sentences.map(v => {
+        const words = v.split(/\s+/);
+        const correctedWords = words.map((word) => correctWord(word));
+        const correctedText = correctedWords.join(' ');
+        return correctedText
+    })
+
+    const fixedText = fixedSentences.join('\n ')
+
+    const result = extractData(fixedText)
+    return {
+        text,
+        sentences,
+        fixedSentences,
+        fixedText,
+        result
+    }
 }
 
 module.exports = {
