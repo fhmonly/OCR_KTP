@@ -39,10 +39,16 @@ const getDataFromKTPWithOCR = [
 
         try {
             const result = await ocrKTP.KTPDataExtractor(imagePath, grayscalePath)
-            res.json(result);
+            res.json({
+                success: true,
+                data: result.result
+            });
         } catch (err) {
-            console.error(err);
-            res.status(500).json({ error: 'OCR processing failed', details: err.message });
+            res.status(500).json({
+                success: false,
+                error: 'OCR processing failed',
+                details: err.message
+            });
         } finally {
             for (const file of [imagePath, grayscalePath]) {
                 fs.unlink(file, (err) => {
